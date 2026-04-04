@@ -173,7 +173,12 @@ class Table:
         self.main_verticals: list[int] = [
             i
             for i, lines in enumerate(verticals_at_x)
-            if len(lines) == 1 and x_bottoms[i] <= lines[0]["index"][3]
+            if len(lines) == 1
+            and x_bottoms[i] <= lines[0]["index"][3]
+            and (
+                self.col_header_boundary > lines[0]["index"][1]
+                or lines[0]["index"][0] == 0
+            )
         ]
 
     def _define_row_header_boundary(self) -> None:
