@@ -4,10 +4,13 @@ from pdfplumber.page import Page
 
 
 class LineExtractor:
-    def __init__(self, page: Page | None, lines: list[dict] | None = None) -> None:
+    def __init__(
+        self, page: Page | None, lines: list[dict] | None = None, tolerance: float = 3.0
+    ) -> None:
         self.lines: list[dict] = []
         self.horizontal_lines: list[dict] = []
         self.vertical_lines: list[dict] = []
+        self.tol: float = tolerance
 
         if page:
             self.init_from_page(page)
@@ -97,7 +100,7 @@ class LineExtractor:
                 )
 
     def can_merge(
-        self, line1_: dict, line2_: dict, main_coord, sub_start, sub_end, tolerance=1.5
+        self, line1_: dict, line2_: dict, main_coord, sub_start, sub_end
     ) -> bool:
         """whether two lines can be merged"""
         if line1_[sub_start] < line2_[sub_start]:
@@ -105,14 +108,12 @@ class LineExtractor:
         else:
             line1, line2 = line2_, line1_
 
-        is_collinear = abs(line1[main_coord] - line2[main_coord]) <= tolerance
-        is_connected = line2[sub_start] <= line1[sub_end] + tolerance
+        is_collinear = abs(line1[main_coord] - line2[main_coord]) <= self.tol
+        is_connected = line2[sub_start] <= line1[sub_end] + self.tol
 
         return is_collinear and is_connected
 
-    def merge_lines(
-        self, lines: list[dict], orientation: str, tolerance=1.5
-    ) -> list[dict]:
+    def merge_lines(self, lines: list[dict], orientation: str) -> list[dict]:
         """merge collinear line segments"""
         if not lines:
             return []
@@ -135,9 +136,7 @@ class LineExtractor:
         current = lines[0]
 
         for next_line in lines[1:]:
-            if self.can_merge(
-                current, next_line, main_coord, sub_start, sub_end, tolerance
-            ):
+            if self.can_merge(current, next_line, main_coord, sub_start, sub_end):
                 current[sub_start] = min(current[sub_start], next_line[sub_start])
                 current[sub_end] = max(current[sub_end], next_line[sub_end])
             else:
@@ -147,52 +146,7 @@ class LineExtractor:
         merged.append(current)
         return merged
 
-    def merge_broken_lines(
-        self, lines: list[dict], orientation: str, gap_tolerance=2.0
-    ) -> list[dict]:
-        """Phase 2 merge: merge collinear segments that have small gaps.
-
-        After the conservative Phase 1 merge (tolerance=1.5), broken lines
-        fragmented at grid intersections may remain as separate segments.
-        This method merges them if the gap between consecutive collinear
-        segments is within gap_tolerance.
-        """
-        if not lines:
-            return []
-
-        if orientation == "y":
-            main_coord = "x0"
-            sub_start = "top"
-            sub_end = "bottom"
-        else:
-            main_coord = "top"
-            sub_start = "x0"
-            sub_end = "x1"
-
-        # Already sorted from Phase 1, but re-sort to be safe
-        lines.sort(key=itemgetter(main_coord, sub_start))
-
-        merged = []
-        current = lines[0]
-
-        for next_line in lines[1:]:
-            is_collinear = abs(current[main_coord] - next_line[main_coord]) <= 1.5
-            gap = next_line[sub_start] - current[sub_end]
-            is_close = gap <= gap_tolerance
-
-            if is_collinear and is_close:
-                current[sub_start] = min(current[sub_start], next_line[sub_start])
-                current[sub_end] = max(current[sub_end], next_line[sub_end])
-            else:
-                merged.append(current)
-                current = next_line
-
-        merged.append(current)
-        return merged
-
-    def remove_included_lines(
-        self, lines: list[dict], orientation: str, tolerance=1.5
-    ) -> list[dict]:
+    def remove_included_lines(self, lines: list[dict], orientation: str) -> list[dict]:
         if orientation == "y":
             # 1. y座標方向のlineをmergeしたい。x座標が等しいものを寄せる
             main_coord = "x0"
@@ -210,9 +164,9 @@ class LineExtractor:
                 if i in skip or j in skip or i == j:
                     continue
 
-                is_collinear = abs(long[main_coord] - short[main_coord]) <= tolerance
-                include_start = long[sub_start] - tolerance <= short[sub_start]
-                include_end = short[sub_end] <= long[sub_end] + tolerance
+                is_collinear = abs(long[main_coord] - short[main_coord]) <= self.tol
+                include_start = long[sub_start] - self.tol <= short[sub_start]
+                include_end = short[sub_end] <= long[sub_end] + self.tol
 
                 if is_collinear and include_start and include_end:
                     skip.add(j)
@@ -237,13 +191,8 @@ class LineExtractor:
 
     def extract(self) -> list[dict]:
         """extract the lines contained in the page"""
-        # Phase 1: conservative merge (tolerance=1.5) to prevent cross-table merge
         merged_horizontal = self.merge_lines(self.horizontal_lines, "x")
         merged_vertical = self.merge_lines(self.vertical_lines, "y")
-
-        # Phase 2: merge broken lines with relaxed gap tolerance
-        merged_horizontal = self.merge_broken_lines(merged_horizontal, "x")
-        merged_vertical = self.merge_broken_lines(merged_vertical, "y")
 
         self.lines = merged_horizontal + merged_vertical
         self.lines = self.extract_by_length()

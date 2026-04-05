@@ -30,6 +30,10 @@ class TableDetector:
         x_lines = [line for line in lines if line["orientation"] == "x"]
         y_lines = [line for line in lines if line["orientation"] == "y"]
 
+        # テーブルには水平線と垂直線の両方が必要
+        if not x_lines or not y_lines:
+            return False
+
         core_x, core_y = 0, 0
         for x_line in x_lines:
             length = x_line["x1"] - x_line["x0"]
