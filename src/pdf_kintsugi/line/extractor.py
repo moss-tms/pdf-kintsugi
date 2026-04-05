@@ -147,6 +147,49 @@ class LineExtractor:
         merged.append(current)
         return merged
 
+    def merge_broken_lines(
+        self, lines: list[dict], orientation: str, gap_tolerance=2.0
+    ) -> list[dict]:
+        """Phase 2 merge: merge collinear segments that have small gaps.
+
+        After the conservative Phase 1 merge (tolerance=1.5), broken lines
+        fragmented at grid intersections may remain as separate segments.
+        This method merges them if the gap between consecutive collinear
+        segments is within gap_tolerance.
+        """
+        if not lines:
+            return []
+
+        if orientation == "y":
+            main_coord = "x0"
+            sub_start = "top"
+            sub_end = "bottom"
+        else:
+            main_coord = "top"
+            sub_start = "x0"
+            sub_end = "x1"
+
+        # Already sorted from Phase 1, but re-sort to be safe
+        lines.sort(key=itemgetter(main_coord, sub_start))
+
+        merged = []
+        current = lines[0]
+
+        for next_line in lines[1:]:
+            is_collinear = abs(current[main_coord] - next_line[main_coord]) <= 1.5
+            gap = next_line[sub_start] - current[sub_end]
+            is_close = gap <= gap_tolerance
+
+            if is_collinear and is_close:
+                current[sub_start] = min(current[sub_start], next_line[sub_start])
+                current[sub_end] = max(current[sub_end], next_line[sub_end])
+            else:
+                merged.append(current)
+                current = next_line
+
+        merged.append(current)
+        return merged
+
     def remove_included_lines(
         self, lines: list[dict], orientation: str, tolerance=1.5
     ) -> list[dict]:
@@ -194,8 +237,13 @@ class LineExtractor:
 
     def extract(self) -> list[dict]:
         """extract the lines contained in the page"""
+        # Phase 1: conservative merge (tolerance=1.5) to prevent cross-table merge
         merged_horizontal = self.merge_lines(self.horizontal_lines, "x")
         merged_vertical = self.merge_lines(self.vertical_lines, "y")
+
+        # Phase 2: merge broken lines with relaxed gap tolerance
+        merged_horizontal = self.merge_broken_lines(merged_horizontal, "x")
+        merged_vertical = self.merge_broken_lines(merged_vertical, "y")
 
         self.lines = merged_horizontal + merged_vertical
         self.lines = self.extract_by_length()
