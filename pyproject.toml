@@ -1,6 +1,6 @@
 [project]
 name = "pdf-kintsugi"
-version = "0.1.1"
+version = "0.1.2"
 description = "PDF table extraction with Docling and pdfplumber"
 readme = "README.md"
 license = { text = "MIT" }

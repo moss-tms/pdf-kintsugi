@@ -18,14 +18,14 @@ class PageParser:
         char_extractor = CharExtractor(page)
         self.chars: list[dict] = char_extractor.extract()
 
-        line_extractor = LineExtractor(self.page)
+        line_extractor = LineExtractor(self.page, tolerance=self.tol)
         self.lines: list[dict] = line_extractor.extract()
 
         self.build(counter=0)
 
     def build(self, counter: int = 1) -> list[list[Table]]:
         if counter == 1:
-            line_extractor = LineExtractor(None, self.lines)
+            line_extractor = LineExtractor(None, self.lines, tolerance=self.tol)
             self.lines = line_extractor.extract()
 
         my_tables: list[Table] = self._detect_tables()
